@@ -15,29 +15,42 @@ typedef struct {
     MenuItem* (*next)(void*);
 } Iterator;
 
+/* 前置声明 PancakeHouseMenu */
+typedef struct PancakeHouseMenu PancakeHouseMenu;
+
+/* 煎饼屋菜单迭代器状态 */
+typedef struct {
+    PancakeHouseMenu* menu;
+    int position;
+} PancakeIteratorState;
+
 /* 煎饼屋菜单 - 使用数组实现 */
 #define MAX_PANCAKE_ITEMS 10
-typedef struct {
+struct PancakeHouseMenu {
     MenuItem items[MAX_PANCAKE_ITEMS];
     int count;
     Iterator iterator;
-} PancakeHouseMenu;
+    PancakeIteratorState iteratorState; // 存储迭代器状态
+};
 
-int pancakeIteratorHasNext(void* menu) {
-    PancakeHouseMenu* pancakeMenu = (PancakeHouseMenu*)menu;
-    return pancakeMenu->count > 0;
+/* 餐厅菜单 - 使用数组实现 */
+#define MAX_DINER_ITEMS 5
+typedef struct {
+    MenuItem items[MAX_DINER_ITEMS];
+    int position;
+    Iterator iterator;
+} DinerMenu;
+
+int pancakeIteratorHasNext(void* state) {
+    PancakeIteratorState* iteratorState = (PancakeIteratorState*)state;
+    return iteratorState->position < iteratorState->menu->count;
 }
 
-MenuItem* pancakeIteratorNext(void* menu) {
-    PancakeHouseMenu* pancakeMenu = (PancakeHouseMenu*)menu;
-    int i;
-    if (pancakeMenu->count > 0) {
-        MenuItem* item = &pancakeMenu->items[0];
-        /* 模拟迭代：将后续元素前移 */
-        for (i = 0; i < pancakeMenu->count - 1; i++) {
-            pancakeMenu->items[i] = pancakeMenu->items[i + 1];
-        }
-        pancakeMenu->count--;
+MenuItem* pancakeIteratorNext(void* state) {
+    PancakeIteratorState* iteratorState = (PancakeIteratorState*)state;
+    if (pancakeIteratorHasNext(state)) {
+        MenuItem* item = &iteratorState->menu->items[iteratorState->position];
+        iteratorState->position++;
         return item;
     }
     return NULL;
@@ -47,6 +60,10 @@ void initPancakeHouseMenu(PancakeHouseMenu* menu) {
     menu->count = 0;
     menu->iterator.hasNext = pancakeIteratorHasNext;
     menu->iterator.next = pancakeIteratorNext;
+    
+    // 初始化迭代器状态
+    menu->iteratorState.menu = menu;
+    menu->iteratorState.position = 0;
 }
 
 void addPancakeItem(PancakeHouseMenu* menu, const char* name, 
@@ -60,14 +77,6 @@ void addPancakeItem(PancakeHouseMenu* menu, const char* name,
         menu->items[menu->count++] = item;
     }
 }
-
-/* 餐厅菜单 - 使用链表实现 */
-#define MAX_DINER_ITEMS 5
-typedef struct {
-    MenuItem items[MAX_DINER_ITEMS];
-    int position;
-    Iterator iterator;
-} DinerMenu;
 
 int dinerIteratorHasNext(void* menu) {
     DinerMenu* dinerMenu = (DinerMenu*)menu;
@@ -122,10 +131,12 @@ void initWaitress(Waitress* waitress, PancakeHouseMenu* pancakeMenu, DinerMenu* 
 
 void printMenu(Waitress* waitress) {
     printf("MENU\n----\nBREAKFAST\n");
+    // 重置煎饼屋菜单迭代器状态
+    waitress->pancakeMenu->iteratorState.position = 0;
     Iterator* pancakeIterator = &waitress->pancakeMenu->iterator;
-    void* pancakeMenu = waitress->pancakeMenu;
-    while (pancakeIterator->hasNext(pancakeMenu)) {
-        MenuItem* item = pancakeIterator->next(pancakeMenu);
+    void* pancakeState = &waitress->pancakeMenu->iteratorState;
+    while (pancakeIterator->hasNext(pancakeState)) {
+        MenuItem* item = pancakeIterator->next(pancakeState);
         printf("%s, $%.2f\n", item->name, item->price);
         printf("  -- %s\n", item->description);
         if (item->vegetarian) {
@@ -134,6 +145,8 @@ void printMenu(Waitress* waitress) {
     }
 
     printf("\nLUNCH\n");
+    // 重置餐厅菜单迭代器位置
+    waitress->dinerMenu->position = 0;
     Iterator* dinerIterator = &waitress->dinerMenu->iterator;
     void* dinerMenu = waitress->dinerMenu;
     while (dinerIterator->hasNext(dinerMenu)) {
@@ -167,6 +180,10 @@ int main() {
     initWaitress(&waitress, &pancakeMenu, &dinerMenu);
 
     /* 打印菜单 */
+    printMenu(&waitress);
+    
+    // 可以再次打印菜单，验证非破坏性遍历
+    printf("\n\nREPRINTING MENU:\n");
     printMenu(&waitress);
 
     return 0;
