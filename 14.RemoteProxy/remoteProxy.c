@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h> // 新增：包含atoi函数所需的头文件
-#include <unistd.h> // 用于模拟网络延迟的sleep函数
+#include <stdlib.h>
+#include <unistd.h>
 
 // 糖果机状态枚举
 typedef enum {
@@ -14,6 +14,9 @@ typedef enum {
 // 前向声明
 typedef struct CandyMachine CandyMachine;
 typedef struct CandyMachineProxy CandyMachineProxy;
+
+// 函数原型声明（新增）
+void handleRemoteRequest();
 
 // 糖果机接口定义（函数指针）
 typedef struct {
@@ -34,10 +37,9 @@ struct CandyMachine {
 struct CandyMachineProxy {
     CandyMachineInterface* vtable;
     char location[20];
-    // 代理需要知道远程对象的位置信息
 };
 
-// 全局变量 - 模拟不使用动态内存分配
+// 全局变量
 CandyMachine realMachine;
 CandyMachineProxy proxy;
 char networkBuffer[100]; // 模拟网络缓冲区
@@ -58,7 +60,6 @@ const char* realGetLocation(void* machine) {
     return cm->location;
 }
 
-// 真实糖果机的接口表
 CandyMachineInterface realMachineVtable = {
     realGetState,
     realGetCount,
@@ -79,12 +80,13 @@ void receiveFromNetwork(char* buffer, int size) {
     sleep(1); // 模拟网络延迟
 }
 
-// 代理方法实现 - 这些方法会通过网络与远程对象通信
+// 代理方法实现
 State proxyGetState(void* machine) {
-    CandyMachineProxy* proxy = (CandyMachineProxy*)machine;
-    
     // 发送请求到远程
     sendOverNetwork("REQUEST_STATE");
+    
+    // 处理远程请求
+    handleRemoteRequest();
     
     // 接收响应
     char response[20];
@@ -100,10 +102,11 @@ State proxyGetState(void* machine) {
 }
 
 int proxyGetCount(void* machine) {
-    CandyMachineProxy* proxy = (CandyMachineProxy*)machine;
-    
     // 发送请求到远程
     sendOverNetwork("REQUEST_COUNT");
+    
+    // 处理远程请求
+    handleRemoteRequest();
     
     // 接收响应
     char response[20];
@@ -115,10 +118,9 @@ int proxyGetCount(void* machine) {
 
 const char* proxyGetLocation(void* machine) {
     CandyMachineProxy* proxy = (CandyMachineProxy*)machine;
-    return proxy->location; // 位置信息本地存储，不需要网络请求
+    return proxy->location;
 }
 
-// 代理的接口表
 CandyMachineInterface proxyVtable = {
     proxyGetState,
     proxyGetCount,
@@ -147,13 +149,11 @@ void handleRemoteRequest() {
 
 // 初始化函数
 void initMachines(const char* location, int initialCount) {
-    // 初始化真实糖果机
     realMachine.vtable = &realMachineVtable;
     realMachine.count = initialCount;
     realMachine.state = initialCount > 0 ? NO_QUARTER : SOLD_OUT;
     strncpy(realMachine.location, location, sizeof(realMachine.location)-1);
     
-    // 初始化代理
     proxy.vtable = &proxyVtable;
     strncpy(proxy.location, location, sizeof(proxy.location)-1);
 }
@@ -175,34 +175,26 @@ void monitorMachine(CandyMachineInterface* machine, void* instance) {
 
 // 模拟远程糖果机操作
 void simulateRemoteOperation() {
-    // 模拟远程糖果机售出一颗糖果
     if (realMachine.count > 0) {
         realMachine.count--;
         realMachine.state = SOLD;
         printf("\n[远程糖果机] 售出一颗糖果\n");
         
-        // 模拟状态转换
         sleep(1);
         realMachine.state = realMachine.count > 0 ? NO_QUARTER : SOLD_OUT;
     }
 }
 
 int main() {
-    // 初始化糖果机和代理
     initMachines("中央车站", 10);
     
-    // 客户端通过代理监控远程糖果机
     printf("=== 第一次监控 ===\n");
     monitorMachine(proxy.vtable, &proxy);
-    handleRemoteRequest(); // 处理代理发出的请求
     
-    // 模拟远程操作
     simulateRemoteOperation();
     
-    // 再次监控
     printf("\n=== 第二次监控 ===\n");
     monitorMachine(proxy.vtable, &proxy);
-    handleRemoteRequest(); // 处理代理发出的请求
     
     return 0;
 }
